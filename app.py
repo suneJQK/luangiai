@@ -1,4 +1,4 @@
- #!/usr/bin/env python3
+#!/usr/bin/env python3
 import json
 import os
 from datetime import datetime
@@ -288,4 +288,124 @@ with tab_main:
             system_instruction_text = (
                 "Bạn là Engine Suy Luận Tử Vi Đẩu Số Chuyên Sâu.\n"
                 "BỘ QUY TẮC BẮT BUỘC:\n```json\n"
-                f"{json.dumps(engine_data, ensure_ascii=False, indent=2)[:250000]}\n
+                f"{json.dumps(engine_data, ensure_ascii=False, indent=2)[:250000]}\n```"
+            )
+
+            user_prompt = (
+                f"Lập luận giải cho lá số này. Năm Tiểu Hạn: {selected_year}."
+                f" Ghi chú: {user_note}"
+            )
+
+            content_payload = [image]
+            for cung_name, crop_img in cropped_dict.items():
+              content_payload.extend([f"Cung {cung_name}:", crop_img])
+            content_payload.append(user_prompt)
+
+            response = client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=content_payload,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction_text,
+                    temperature=0.15,
+                ),
+            )
+
+            if response and response.text:
+              st.session_state.analysis_result = response.text
+              st.session_state.chat_history = []  # Làm sạch chat khi có lá số mới
+              st.success("✅ Hoàn tất luận giải!")
+
+          except Exception as e:
+            st.error(f"❌ Lỗi AI Engine: {e}")
+
+    # Display Analysis Text
+    if st.session_state.analysis_result:
+      st.markdown(st.session_state.analysis_result)
+    else:
+      st.info("👈 Bấm 'BẮT ĐẦU LUẬN GIẢI' ở cột bên trái để AI lập bài luận.")
+
+    # KHUNG CHAT TƯƠNG TÁC (LUÔN HIỂN THỊ CỐ ĐỊNH Ở CỘT PHẢI)
+    st.markdown("---")
+    st.subheader("💬 Trò Chuyện & Hỏi Thêm AI Về Lá Số")
+
+    # Render Lịch Sử Chat
+    for message in st.session_state.chat_history:
+      with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+    # Khung Nhập Liệu Chat
+    if chat_input_text := st.chat_input(
+        "Đặt câu hỏi cho AI (Ví dụ: Hạn năm nay ra sao?, Cung Tử Tức thế"
+        " nào?...)"
+    ):
+      if not st.session_state.analysis_result:
+        st.warning("⚠️ Hãy thực hiện Luận Giải Lá Số trước khi bắt đầu chat!")
+      else:
+        # Thêm câu hỏi người dùng
+        st.session_state.chat_history.append(
+            {"role": "user", "content": chat_input_text}
+        )
+        with st.chat_message("user"):
+          st.markdown(chat_input_text)
+
+        # AI Phản hồi
+        with st.chat_message("assistant"):
+          with st.spinner("AI đang giải đáp dựa trên lá số..."):
+            try:
+              client = genai.Client(api_key=API_KEY)
+
+              chat_system_instruction = (
+                  "Bạn là Chuyên Gia Tử Vi Đẩu Số đang trực tiếp tư vấn cho gia"
+                  " chủ.\n"
+                  "Dựa vào BÀI LUẬN ĐÃ LẬP dưới đây để trả lời câu hỏi chi"
+                  " tiết:\n\n"
+                  f"BÀI LUẬN LÁ SỐ:\n{st.session_state.analysis_result}"
+              )
+
+              # Chuẩn bị Context Chat
+              history_context = ""
+              for msg in st.session_state.chat_history[:-1]:
+                role_name = "User" if msg["role"] == "user" else "AI"
+                history_context += f"{role_name}: {msg['content']}\n"
+
+              full_prompt = (
+                  f"{history_context}\nUser: {chat_input_text}\nAI:"
+              )
+
+              chat_response = client.models.generate_content(
+                  model="gemini-2.5-flash",
+                  contents=[full_prompt],
+                  config=types.GenerateContentConfig(
+                      system_instruction=chat_system_instruction,
+                      temperature=0.3,
+                  ),
+              )
+
+              if chat_response and chat_response.text:
+                st.markdown(chat_response.text)
+                st.session_state.chat_history.append(
+                    {"role": "assistant", "content": chat_response.text}
+                )
+            except Exception as e:
+              st.error(f"Lỗi phản hồi: {e}")
+
+# ==========================================
+# TAB 2, 3, 4: GIỮ NGUYÊN TÍNH NĂNG
+# ==========================================
+with tab_rules:
+  st.subheader("📜 Bộ Quy Tắc Cốt Lõi (`tu_vi_engine.json`)")
+  if engine_data:
+    st.json(engine_data)
+  else:
+    st.error(engine_err)
+
+with tab_books:
+  st.subheader("📚 Kho Tham Khảo Phú / Ví Dụ (`books_cache.json`)")
+  if books_text:
+    st.text_area("Dữ liệu sách:", value=books_text, height=600)
+  else:
+    st.warning(books_err)
+
+with tab_contact:
+  st.subheader("🔗 Liên Hệ & Hỗ Trợ Engine")
+  st.markdown("- **Engine Tử Vi Đẩu Số Luận Giải Tự Động & Chatbot AI.**")
